@@ -8,7 +8,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -29,7 +29,7 @@ jobs:
           else
             mapfile -t matches < <(find . -mindepth 2 -maxdepth 4 -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort)
             if [[ ${#matches[@]} -ne 1 ]]; then
-              printf 'Expected exactly one nested pubspec.yaml; found %s\n' "${#matches[@]}"
+              printf 'Expected exactly one Flutter project; found %s\n' "${#matches[@]}"
               printf '%s\n' "${matches[@]}"
               exit 1
             fi
@@ -37,14 +37,22 @@ jobs:
             test -f "$PROJECT_DIR/lib/main.dart"
           fi
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Using Flutter project at $PROJECT_DIR"
       - name: Generate Android platform
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter create --platforms=android --project-name=jitendra_transport .
-      - name: Install dependencies
+      - name: Install application and development dependencies
         working-directory: ${{ steps.project.outputs.dir }}
-        run: flutter pub get
-      - name: Analyze project
+        run: |
+          flutter pub add --dev flutter_test --sdk=flutter
+          flutter pub add --dev flutter_lints
+          flutter pub get
+      - name: Remove incompatible generated template test
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          if [ -f test/widget_test.dart ] && grep -q 'MyApp' test/widget_test.dart; then
+            rm test/widget_test.dart
+          fi
+      - name: Analyze application
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter analyze --no-fatal-infos
       - name: Build debug APK
