@@ -17,3 +17,14 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/app_icon.png
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/app_icon.png
+  adaptive_icon_background: '#0C3169'
+  adaptive_icon_foreground: assets/app_icon.png
