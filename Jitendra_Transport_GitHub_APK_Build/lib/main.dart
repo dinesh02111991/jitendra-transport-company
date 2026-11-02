@@ -109,6 +109,7 @@ class Field {
 }
 Future<bool> formDialog(BuildContext context,String title,List<Field> fields,Future<void> Function() save) async {
   final ok=await showDialog<bool>(context:context,builder:(c)=>AlertDialog(title:Text(title),content:SizedBox(width:450,child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:fields.map((f)=>f.widget()).toList()))),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Cancel')),FilledButton(onPressed:() async {try{await save();if(c.mounted)Navigator.pop(c,true);}catch(e){if(c.mounted)snack(c,'Unable to save: $e');}},child:const Text('Save'))]));
+  await Future<void>.delayed(const Duration(milliseconds: 450));
   for(final f in fields){f.dispose();}
   return ok??false;
 }
@@ -137,7 +138,8 @@ class _TripsState extends State<Trips> {
     final saved=await showDialog<bool>(context:context,builder:(c)=>StatefulBuilder(builder:(c,setLocal)=>AlertDialog(title:const Text('New trip'),content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
       DropdownButtonFormField<int>(initialValue:vehicle,decoration:const InputDecoration(labelText:'Vehicle'),items:vs.map((v)=>DropdownMenuItem(value:v['id'] as int,child:Text('${v['registration']}'))).toList(),onChanged:(x)=>setLocal(()=>vehicle=x)),
       if(cs.isNotEmpty)DropdownButtonFormField<int>(initialValue:customer,decoration:const InputDecoration(labelText:'Customer'),items:cs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['name']}'))).toList(),onChanged:(x)=>setLocal(()=>customer=x)),
-      origin.widget(),destination.widget(),freight.widget(),note.widget()]),),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Cancel')),FilledButton(onPressed:()async{if(origin.value.isEmpty||destination.value.isEmpty){snack(c,'From and To are required');return;}await Store.add('trips',{'vehicle_id':vehicle,'customer_id':customer,'origin':origin.value,'destination':destination.value,'departure':today(),'freight':amount(freight.value),'status':'In Transit','note':note.value});if(c.mounted)Navigator.pop(c,true);},child:const Text('Start trip'))])));
+      origin.widget(),destination.widget(),freight.widget(),note.widget()]),),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Cancel')),FilledButton(onPressed:()async{if(origin.value.isEmpty||destination.value.isEmpty){snack(c,'From and To are required');return;}try {await Store.add('trips',{'vehicle_id':vehicle,'customer_id':customer,'origin':origin.value,'destination':destination.value,'departure':today(),'freight':amount(freight.value),'status':'In Transit','note':note.value});if(c.mounted)Navigator.pop(c,true);} catch(e) {if(c.mounted)snack(c,'Unable to save trip: $e');}},child:const Text('Start trip'))])));
+    await Future<void>.delayed(const Duration(milliseconds: 450));
     for(final f in [origin,destination,freight,note]){f.dispose();}
     if(saved==true)widget.changed();
   }
@@ -180,6 +182,7 @@ class _DocumentsState extends State<Documents> {
           await txn.insert('documents',{'kind':kind,'doc_no':num,'customer_id':customer,'trip_id':trip,'vehicle_id':vehicle,'issued_on':today(),'consignor':fields[0].value,'consignee':fields[1].value,'goods':fields[2].value,'articles':fields[3].value,'weight':fields[4].value,'origin':fields[5].value,'destination':fields[6].value,'freight':amount(fields[7].value),'other':amount(fields[8].value),'paid':amount(fields[9].value),'note':fields[10].value});
         });if(c.mounted)Navigator.pop(c,true);}catch(e){if(c.mounted)snack(c,'Unable to save: $e');}
       },child:const Text('Create'))])));
+    await Future<void>.delayed(const Duration(milliseconds: 450));
     for(final f in fields){f.dispose();}
     if(saved==true)widget.changed();
   }
