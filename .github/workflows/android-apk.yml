@@ -38,6 +38,29 @@ jobs:
           fi
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
       - name: Generate Android platform
+
+      - name: Verify JTC source version
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          echo "========== JTC BUILD VERIFICATION =========="
+          echo "Project directory: $(pwd)"
+          echo "Git commit: $(git rev-parse --short HEAD)"
+          echo "Main Dart SHA256:"
+          sha256sum lib/main.dart
+
+          echo "Checking specialization text..."
+          if grep -q "Specialists in 20 Ft" lib/main.dart; then
+            echo "PASS: Specialization text found"
+          else
+            echo "FAIL: Specialization text missing"
+            exit 1
+          fi
+
+          echo "Checking PDF generator..."
+          grep -n -E "class PdfService|class Dashboard" lib/main.dart || true
+
+          echo "========== END VERIFICATION =========="      
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter create --platforms=android --project-name=jitendra_transport .
       - name: Install application and development dependencies
@@ -58,9 +81,17 @@ jobs:
       - name: Build debug APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter build apk --debug
+
+      - name: Rename APK with build number
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-debug.apk \
+             build/app/outputs/flutter-apk/JTC-V7-build-${{ github.run_number }}.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jitendra-Transport-Test-APK
-          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-debug.apk
+          name: JTC-V7-Build-${{ github.run_number }}
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/JTC-V7-build-${{ github.run_number }}.apk
           if-no-files-found: error
+
