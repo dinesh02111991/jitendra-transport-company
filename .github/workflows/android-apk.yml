@@ -1,24 +1,33 @@
 name: Build Android Test APK
+
 on:
   workflow_dispatch:
   push:
     branches: [main]
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
       - name: Locate Flutter project
         id: project
         shell: bash
@@ -37,47 +46,46 @@ jobs:
             test -f "$PROJECT_DIR/lib/main.dart"
           fi
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-      - name: Generate Android platform
 
       - name: Verify JTC source version
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
-          echo "========== JTC BUILD VERIFICATION =========="
+          echo '========== JTC BUILD VERIFICATION =========='
           echo "Project directory: $(pwd)"
           echo "Git commit: $(git rev-parse --short HEAD)"
-          echo "Main Dart SHA256:"
           sha256sum lib/main.dart
-
-          echo "Checking specialization text..."
-          if grep -q "Specialists in 20 Ft" lib/main.dart; then
-            echo "PASS: Specialization text found"
+          if grep -q 'Specialists in 20 Ft' lib/main.dart; then
+            echo 'PASS: Specialization text found'
           else
-            echo "FAIL: Specialization text missing"
+            echo 'FAIL: Specialization text missing'
             exit 1
           fi
+          grep -n -E 'class PdfService|class Dashboard' lib/main.dart || true
+          echo '========== END VERIFICATION =========='
 
-          echo "Checking PDF generator..."
-          grep -n -E "class PdfService|class Dashboard" lib/main.dart || true
-
-          echo "========== END VERIFICATION =========="      
+      - name: Generate Android platform
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter create --platforms=android --project-name=jitendra_transport .
+
       - name: Install application and development dependencies
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
           flutter pub add --dev flutter_test --sdk=flutter
           flutter pub add --dev flutter_lints
           flutter pub get
+
       - name: Remove incompatible generated template test
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
           if [ -f test/widget_test.dart ] && grep -q 'MyApp' test/widget_test.dart; then
             rm test/widget_test.dart
           fi
+
       - name: Analyze application
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter analyze --no-fatal-infos
+
       - name: Build debug APK
         working-directory: ${{ steps.project.outputs.dir }}
         run: flutter build apk --debug
@@ -86,12 +94,11 @@ jobs:
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
           cp build/app/outputs/flutter-apk/app-debug.apk \
-             build/app/outputs/flutter-apk/JTC-V7-build-${{ github.run_number }}.apk
+             build/app/outputs/flutter-apk/JTC-build-${{ github.run_number }}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JTC-V7-Build-${{ github.run_number }}
-          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/JTC-V7-build-${{ github.run_number }}.apk
+          name: JTC-Build-${{ github.run_number }}
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/JTC-build-${{ github.run_number }}.apk
           if-no-files-found: error
-
