@@ -50,8 +50,8 @@ class Store {
 class TransportApp extends StatelessWidget {
   const TransportApp({super.key});
   @override Widget build(BuildContext context) => MaterialApp(
-    title: 'Jitendra Transport Company', debugShowCheckedModeBanner:false,
-    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: navy, primary: navy, secondary: orange), useMaterial3:true, scaffoldBackgroundColor:const Color(0xfff5f7fa), appBarTheme:const AppBarTheme(backgroundColor:navy,foregroundColor:Colors.white)),
+    title: 'JTC', debugShowCheckedModeBanner:false,
+    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: navy, primary: navy, secondary: orange), useMaterial3:true, scaffoldBackgroundColor:const Color(0xfff1f5fb), appBarTheme:const AppBarTheme(backgroundColor:navy,foregroundColor:Colors.white),inputDecorationTheme:InputDecorationTheme(filled:true,fillColor:Colors.white,contentPadding:const EdgeInsets.symmetric(horizontal:14,vertical:14),border:OutlineInputBorder(borderRadius:BorderRadius.circular(12)),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(12),borderSide:const BorderSide(color:Color(0xffd5e0ed)))),cardTheme:CardThemeData(shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17)))),
     home:const Home());
 }
 
@@ -61,13 +61,15 @@ class _HomeState extends State<Home> {
   void reload()=>setState(()=>refresh++);
   @override Widget build(BuildContext context) {
     final screens=[Dashboard(key:ValueKey('dash$refresh')), Vehicles(key:ValueKey('veh$refresh'),changed:reload), Trips(key:ValueKey('trip$refresh'),changed:reload), Documents(key:ValueKey('docs$refresh'),changed:reload), SettingsPage(key:ValueKey('settings$refresh'),changed:reload)];
-    return Scaffold(appBar:AppBar(title:const Text('Jitendra Transport Company',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold))),body:screens[tab],
-      bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const [
-        NavigationDestination(icon:Icon(Icons.dashboard_outlined),label:'Home'),
+    return Scaffold(
+      appBar: AppBar(toolbarHeight:68,title:Row(children:[Container(width:43,height:43,decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(13)),child:const Center(child:Text('JTC',style:TextStyle(fontSize:15,fontWeight:FontWeight.w900,color:navy)))),const SizedBox(width:12),const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('JTC',style:TextStyle(fontSize:22,fontWeight:FontWeight.w900)),Text('Jitendra Transport Company',style:TextStyle(fontSize:11,color:Colors.white70))])]),actions:[IconButton(tooltip:'Business settings',onPressed:()=>setState(()=>tab=4),icon:const Icon(Icons.settings_outlined))]),
+      body:tab==0?Dashboard(key:ValueKey('dash$refresh'),onNavigate:(index)=>setState(()=>tab=index)):screens[tab],
+      bottomNavigationBar:NavigationBar(height:70,selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const [
+        NavigationDestination(icon:Icon(Icons.home_outlined),selectedIcon:Icon(Icons.home),label:'Home'),
         NavigationDestination(icon:Icon(Icons.local_shipping_outlined),label:'Vehicles'),
         NavigationDestination(icon:Icon(Icons.route_outlined),label:'Trips'),
-        NavigationDestination(icon:Icon(Icons.receipt_long_outlined),label:'Bills'),
-        NavigationDestination(icon:Icon(Icons.settings_outlined),label:'Settings')]));
+        NavigationDestination(icon:Icon(Icons.receipt_long_outlined),label:'Documents'),
+        NavigationDestination(icon:Icon(Icons.settings_outlined),label:'More')]));
   }
 }
 
@@ -75,7 +77,7 @@ Widget brandBanner()=>Container(
   margin:const EdgeInsets.only(bottom:14),
   padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),
   decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(18),boxShadow:[BoxShadow(color:navy.withOpacity(.08),blurRadius:18,offset:const Offset(0,5))]),
-  child:Column(children:[Image.asset('assets/logo.png',width:310,height:155,fit:BoxFit.contain),const SizedBox(height:5),const Text('TRANSPORT MANAGEMENT',style:TextStyle(color:navy,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))]));
+  child:Column(children:[Image.asset('assets/logo.png',width:310,height:105,fit:BoxFit.contain),const SizedBox(height:5),const Text('TRANSPORT MANAGEMENT',style:TextStyle(color:navy,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))]));
 
 Widget panel({required Widget child})=>Card(elevation:0,color:Colors.white,margin:const EdgeInsets.symmetric(vertical:6),child:Padding(padding:const EdgeInsets.all(14),child:child));
 Widget line(String label,String value)=>Padding(padding:const EdgeInsets.symmetric(vertical:3),child:Row(children:[Expanded(child:Text(label,style:const TextStyle(color:Colors.black54))),Flexible(child:Text(value,textAlign:TextAlign.right,style:const TextStyle(fontWeight:FontWeight.w600)))]));
@@ -83,27 +85,36 @@ Widget heading(String s)=>Padding(padding:const EdgeInsets.symmetric(vertical:10
 void snack(BuildContext c,String message)=>ScaffoldMessenger.of(c).showSnackBar(SnackBar(content:Text(message)));
 
 class Dashboard extends StatelessWidget {
-  const Dashboard({super.key});
+  final ValueChanged<int> onNavigate;
+  const Dashboard({super.key,required this.onNavigate});
   @override Widget build(BuildContext context)=>FutureBuilder(future:Future.wait([Store.rows('vehicles'),Store.rows('trips'),Store.rows('expenses'),Store.rows('documents')]),builder:(c,s){
     if(!s.hasData)return const Center(child:CircularProgressIndicator());
     final vehicles=s.data![0],trips=s.data![1],expenses=s.data![2],docs=s.data![3];
     final month=today().substring(0,7);
     final active=trips.where((t)=>t['status']=='In Transit').toList();
-    // Revenue is counted from issued bills, not trips, to prevent double-counting.
     final revenue=docs.where((d)=>d['kind']=='Bill' && '${d['issued_on']}'.startsWith(month)).fold<double>(0,(a,d)=>a+amount(d['freight'])+amount(d['other']));
     final cost=expenses.where((e)=>'${e['spent_on']}'.startsWith(month)).fold<double>(0,(a,e)=>a+amount(e['value']));
     final outstanding=docs.where((d)=>d['kind']=='Bill').fold<double>(0,(a,d)=>a+amount(d['freight'])+amount(d['other'])-amount(d['paid']));
-    return ListView(padding:const EdgeInsets.all(16),children:[
-      brandBanner(),
-      heading('Business overview · ${DateFormat('MMMM yyyy').format(DateTime.now())}'),
-      Wrap(spacing:8,runSpacing:8,children:[_metric('Vehicles', '${vehicles.length}',Icons.local_shipping),_metric('In transit','${active.length}',Icons.route),_metric('Revenue',money.format(revenue),Icons.trending_up),_metric('Expenses',money.format(cost),Icons.payments),_metric('Operating P/L',money.format(revenue-cost),Icons.analytics),_metric('Outstanding',money.format(outstanding),Icons.account_balance_wallet)]),
-      heading('Currently in transit'),
-      if(active.isEmpty)panel(child:const Text('No active trips. Add a trip from the Trips tab.')),
-      ...active.map((t){final v=vehicles.where((v)=>v['id']==t['vehicle_id']);return panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(v.isEmpty?'Vehicle not assigned':'${v.first['registration']}',style:const TextStyle(fontWeight:FontWeight.bold)),Text('${t['origin']} → ${t['destination']}'),line('Departure','${t['departure']}')]));}),
-      const SizedBox(height:14),const Text('P/L = bills issued this month minus expenses dated this month. It is an operating snapshot, not cash flow or tax profit.',style:TextStyle(color:Colors.black54,fontSize:12))
+    return ListView(padding:const EdgeInsets.fromLTRB(16,16,16,26),children:[
+      Container(padding:const EdgeInsets.all(17),decoration:BoxDecoration(gradient:const LinearGradient(colors:[Color(0xff09234e),Color(0xff1455a0)]),borderRadius:BorderRadius.circular(22)),child:Row(children:[Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('WELCOME TO',style:TextStyle(color:Colors.white70,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700)),const SizedBox(height:5),const Text('JITENDRA TRANSPORT',style:TextStyle(color:Colors.white,fontSize:19,fontWeight:FontWeight.w900)),const Text('COMPANY',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w800)),const SizedBox(height:11),Container(width:60,height:4,decoration:BoxDecoration(color:orange,borderRadius:BorderRadius.circular(4))),const SizedBox(height:10),const Text('20 & 32 Ft Containers • FTL • All India',style:TextStyle(color:Colors.white70,fontSize:11))])),const SizedBox(width:8),Image.asset('assets/app_icon.png',width:90,height:90,fit:BoxFit.contain)])),
+      const SizedBox(height:20),const Text('Quick actions',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:navy)),const SizedBox(height:10),
+      GridView.count(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),crossAxisCount:2,mainAxisSpacing:12,crossAxisSpacing:12,childAspectRatio:1.5,children:[
+        _shortcut('New Memo','Transport letter',Icons.description_outlined,const Color(0xff1255a5),()=>onNavigate(3)),
+        _shortcut('New Bill','Freight invoice',Icons.receipt_long_outlined,const Color(0xff078044),()=>onNavigate(3)),
+        _shortcut('Vehicles','Manage fleet',Icons.local_shipping_outlined,navy,()=>onNavigate(1)),
+        _shortcut('Trips','Routes & expenses',Icons.route_outlined,const Color(0xffad4d14),()=>onNavigate(2))]),
+      const SizedBox(height:20),Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[const Text('This month',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:navy)),Text(DateFormat('MMM yyyy').format(DateTime.now()),style:const TextStyle(color:Colors.black54))]),const SizedBox(height:9),
+      Row(children:[Expanded(child:_stat('Revenue',money.format(revenue),Icons.trending_up,const Color(0xff087847))),const SizedBox(width:9),Expanded(child:_stat('Expenses',money.format(cost),Icons.payments_outlined,const Color(0xffb94b38)))]),
+      Row(children:[Expanded(child:_stat('Operating P/L',money.format(revenue-cost),Icons.bar_chart,const Color(0xff1255a5))),const SizedBox(width:9),Expanded(child:_stat('In transit','${active.length} / ${vehicles.length}',Icons.local_shipping_outlined,navy))]),
+      _stat('Outstanding bills',money.format(outstanding),Icons.account_balance_wallet_outlined,navy),
+      const SizedBox(height:15),const Text('Currently in transit',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:navy)),const SizedBox(height:6),
+      if(active.isEmpty)panel(child:const Row(children:[Icon(Icons.check_circle_outline,color:Color(0xff078044)),SizedBox(width:12),Expanded(child:Text('No vehicles currently marked in transit.'))])),
+      ...active.map((t){final v=vehicles.where((v)=>v['id']==t['vehicle_id']);return panel(child:ListTile(contentPadding:EdgeInsets.zero,leading:const CircleAvatar(backgroundColor:Color(0xffe8f0fa),child:Icon(Icons.local_shipping,color:navy)),title:Text(v.isEmpty?'Vehicle not assigned':'${v.first['registration']}',style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('${t['origin']} → ${t['destination']}'),trailing:const Icon(Icons.chevron_right)));}),
+      const SizedBox(height:10),const Text('Operating P/L is based on issued bills minus recorded expenses; it is not a cash-flow or tax report.',style:TextStyle(color:Colors.black54,fontSize:11))
     ]);
   });
-  Widget _metric(String label,String value,IconData icon)=>SizedBox(width:164,child:panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,color:orange),const SizedBox(height:8),Text(label,style:const TextStyle(color:Colors.black54)),Text(value,style:const TextStyle(fontWeight:FontWeight.bold,fontSize:19),maxLines:1,overflow:TextOverflow.ellipsis)])));
+  Widget _shortcut(String title,String sub,IconData icon,Color color,VoidCallback onTap)=>Material(color:Colors.white,borderRadius:BorderRadius.circular(19),child:InkWell(onTap:onTap,borderRadius:BorderRadius.circular(19),child:Container(padding:const EdgeInsets.all(13),decoration:BoxDecoration(borderRadius:BorderRadius.circular(19),border:Border.all(color:const Color(0xffe2eaf4))),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisAlignment:MainAxisAlignment.center,children:[Icon(icon,size:29,color:color),const SizedBox(height:8),Text(title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:17,color:navy)),Text(sub,style:const TextStyle(color:Colors.black54,fontSize:11))]))));
+  Widget _stat(String title,String value,IconData icon,Color color)=>Container(margin:const EdgeInsets.only(bottom:9),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(17),border:Border.all(color:const Color(0xffe2eaf4))),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,color:color,size:23),const SizedBox(height:7),Text(title,style:const TextStyle(color:Colors.black54,fontSize:12)),const SizedBox(height:3),Text(value,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:color,fontSize:19,fontWeight:FontWeight.w900))]));
 }
 
 class Field {
@@ -255,7 +266,10 @@ class PdfService {
     final pdf=pw.Document();
     final logo=pw.MemoryImage((await rootBundle.load('assets/logo.png')).buffer.asUint8List());
     final kind='${d['kind']}';
-    final address=await Store.setting('address'),phone=await Store.setting('phone'),gst=await Store.setting('gstin');
+    final savedAddress=await Store.setting('address'),savedPhone=await Store.setting('phone'),gst=await Store.setting('gstin');
+    final address=savedAddress.isEmpty?'A1, 102, Pawanputra Residency, Kalher, Bhiwandi, Thane - 421302':savedAddress;
+    final phone=savedPhone.isEmpty?'9960153368 / 8208287625 / 8788215464':savedPhone;
+    const specialization='Specialists in 20 Ft & 32 Ft Container Transportation | Full Truck Load (FTL) | All India Transport Services';
     final bank=await Store.setting('bank'),account=await Store.setting('account'),ifsc=await Store.setting('ifsc'),terms=await Store.setting('terms');
     final navy=PdfColor.fromHex('#142B4F'), orange=PdfColor.fromHex('#F18A22'), pale=PdfColor.fromHex('#F3F6FA');
     final total=amount(d['freight'])+amount(d['other']);
@@ -267,6 +281,24 @@ class PdfService {
     pw.Widget band(String title,String subtitle)=>pw.Container(padding:const pw.EdgeInsets.all(15),decoration:pw.BoxDecoration(color:navy,borderRadius:pw.BorderRadius.circular(8)),child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text(title,style:pw.TextStyle(fontSize:18,fontWeight:pw.FontWeight.bold,color:PdfColors.white)),pw.SizedBox(height:4),pw.Text(subtitle,style:pw.TextStyle(fontSize:9,color:PdfColors.white))]),pw.Text(val(d['doc_no']),style:pw.TextStyle(color:PdfColors.white,fontSize:10,fontWeight:pw.FontWeight.bold))]));
     pw.Widget pair(String a,dynamic av,String b,dynamic bv)=>pw.Row(children:[pw.Expanded(child:pw.Container(color:pale,child:cell(a,av))),pw.SizedBox(width:7),pw.Expanded(child:pw.Container(color:pale,child:cell(b,bv)))]);
     pw.Widget line(String label,String value,{bool strong=false})=>pw.Container(padding:const pw.EdgeInsets.symmetric(vertical:7,horizontal:12),color:strong?pale:PdfColors.white,child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text(label,style:pw.TextStyle(fontSize:10,fontWeight:strong?pw.FontWeight.bold:pw.FontWeight.normal)),pw.Text(value,style:pw.TextStyle(fontSize:10,fontWeight:pw.FontWeight.bold,color:navy))]));
+    // One shared PDF header for both document types; changes here affect BOTH PDFs.
+    pw.Widget companyHeader()=>pw.Column(children:[
+      pw.Row(crossAxisAlignment:pw.CrossAxisAlignment.center,children:[
+        pw.Container(width:105,height:72,alignment:pw.Alignment.center,child:pw.Image(logo,fit:pw.BoxFit.contain)),
+        pw.SizedBox(width:13),
+        pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[
+          pw.Text('JITENDRA TRANSPORT CO.',style:pw.TextStyle(color:navy,fontWeight:pw.FontWeight.bold,fontSize:16)),
+          pw.SizedBox(height:5),
+          pw.Text('Office: $address',style:const pw.TextStyle(fontSize:9,lineSpacing:2)),
+          pw.SizedBox(height:3),pw.Text('Mob: $phone',style:const pw.TextStyle(fontSize:9)),
+          if(gst.isNotEmpty)pw.Text('GSTIN: $gst',style:const pw.TextStyle(fontSize:9)),
+        ])),
+      ]),
+      pw.SizedBox(height:10),
+      pw.Container(width:double.infinity,padding:const pw.EdgeInsets.symmetric(vertical:8,horizontal:10),color:navy,
+        child:pw.Text(specialization,textAlign:pw.TextAlign.center,style:pw.TextStyle(color:PdfColors.white,fontWeight:pw.FontWeight.bold,fontSize:8))),
+      pw.SizedBox(height:4),pw.Container(height:3,color:orange),
+    ]);
     if(kind=='Memo') {
       final party=val(customer['name']);
       final pan=val(d['consignor']);
@@ -277,8 +309,7 @@ class PdfService {
       final balance=amount(d['other']).toStringAsFixed(0);
       final condition='${d['note']??''}'.trim();
       pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(38),build:(context)=>[
-        pw.Row(crossAxisAlignment:pw.CrossAxisAlignment.center,children:[pw.Image(logo,width:105,height:65,fit:pw.BoxFit.contain),pw.SizedBox(width:15),pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text('JITENDRA TRANSPORT COMPANY',style:pw.TextStyle(fontSize:15,color:navy,fontWeight:pw.FontWeight.bold)),pw.SizedBox(height:4),pw.Text(address,style:const pw.TextStyle(fontSize:9)),pw.Text('Phone: $phone',style:const pw.TextStyle(fontSize:9)),if(gst.isNotEmpty)pw.Text('GSTIN: $gst',style:const pw.TextStyle(fontSize:9))]))]),
-        pw.SizedBox(height:12),pw.Container(height:3,color:orange),pw.SizedBox(height:18),
+        companyHeader(),pw.SizedBox(height:18),
         pw.Container(padding:const pw.EdgeInsets.symmetric(vertical:12,horizontal:16),decoration:pw.BoxDecoration(color:navy,borderRadius:pw.BorderRadius.circular(6)),child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('TRANSPORT MEMO',style:pw.TextStyle(color:PdfColors.white,fontSize:17,fontWeight:pw.FontWeight.bold)),pw.Text(val(d['doc_no']),style:pw.TextStyle(color:PdfColors.white,fontSize:10))])),
         pw.SizedBox(height:15),pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('Memo No: ${val(d['doc_no'])}',style:pw.TextStyle(color:navy,fontSize:10,fontWeight:pw.FontWeight.bold)),pw.Text('Date: ${val(d['issued_on'])}',style:const pw.TextStyle(fontSize:10))]),
         pw.SizedBox(height:25),pw.Text('To,',style:const pw.TextStyle(fontSize:11)),pw.SizedBox(height:7),pw.Text('M/S: $party',style:pw.TextStyle(fontSize:11,fontWeight:pw.FontWeight.bold)),pw.Text('PAN No: $pan',style:const pw.TextStyle(fontSize:10)),
@@ -293,9 +324,8 @@ class PdfService {
       final dir=await getApplicationDocumentsDirectory();final pdfDir=Directory(p.join(dir.path,'pdfs'));await pdfDir.create(recursive:true);
       final file=File(p.join(pdfDir.path,'${d['doc_no']}.pdf'));await file.writeAsBytes(await pdf.save());return file;
     }
-    pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(35),footer:(context)=>pw.Column(children:[pw.Divider(color:orange),pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('JITENDRA TRANSPORT COMPANY  •  Computer-generated document',style:const pw.TextStyle(fontSize:8,color:PdfColors.grey600)),pw.Text('Page ${context.pageNumber}',style:const pw.TextStyle(fontSize:8,color:PdfColors.grey600))])]),build:(context)=>[
-      pw.Row(crossAxisAlignment:pw.CrossAxisAlignment.center,children:[pw.Image(logo,width:105,height:65,fit:pw.BoxFit.contain),pw.SizedBox(width:15),pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text('JITENDRA TRANSPORT COMPANY',style:pw.TextStyle(fontSize:15,color:navy,fontWeight:pw.FontWeight.bold)),pw.SizedBox(height:4),pw.Text(address,style:const pw.TextStyle(fontSize:9)),pw.Text('Phone: $phone',style:const pw.TextStyle(fontSize:9)),if(gst.isNotEmpty)pw.Text('GSTIN: $gst',style:const pw.TextStyle(fontSize:9))]))]),
-      pw.SizedBox(height:13),pw.Container(height:3,color:orange),pw.SizedBox(height:15),
+    pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(35),footer:(context)=>pw.Column(children:[pw.Divider(color:orange),pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('JITENDRA TRANSPORT CO.  •  Document template V7',style:const pw.TextStyle(fontSize:8,color:PdfColors.grey600)),pw.Text('Page ${context.pageNumber}',style:const pw.TextStyle(fontSize:8,color:PdfColors.grey600))])]),build:(context)=>[
+      companyHeader(),pw.SizedBox(height:15),
       band(kind=='Bill'?'TRANSPORT BILL':'TRANSPORT MEMO',kind=='Bill'?'Freight & consignment statement':'Agreed freight quotation & vehicle placement'),
       pw.SizedBox(height:10),pair('Issue date',d['issued_on'],'Vehicle registration',vehicle['registration']),pw.SizedBox(height:7),pair('Customer / Transporter',customer['name'],'Container type',vehicle['type']),
       section('Journey details'),pair('Loading from',d['origin'],'Delivery to',d['destination']),pw.SizedBox(height:7),pair('Consignor',d['consignor'],'Consignee',d['consignee']),
