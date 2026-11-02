@@ -60,10 +60,10 @@ class _HomeState extends State<Home> {
   int tab=0; int refresh=0;
   void reload()=>setState(()=>refresh++);
   @override Widget build(BuildContext context) {
-    final screens=[Dashboard(key:ValueKey('dash$refresh')), Vehicles(key:ValueKey('veh$refresh'),changed:reload), Trips(key:ValueKey('trip$refresh'),changed:reload), Documents(key:ValueKey('docs$refresh'),changed:reload), SettingsPage(key:ValueKey('settings$refresh'),changed:reload)];
+    final screens=[Dashboard(key:ValueKey('dash$refresh'),onNavigate:(index)=>setState(()=>tab=index)), Vehicles(key:ValueKey('veh$refresh'),changed:reload), Trips(key:ValueKey('trip$refresh'),changed:reload), Documents(key:ValueKey('docs$refresh'),changed:reload), SettingsPage(key:ValueKey('settings$refresh'),changed:reload)];
     return Scaffold(
       appBar: AppBar(toolbarHeight:68,title:Row(children:[Container(width:43,height:43,decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(13)),child:const Center(child:Text('JTC',style:TextStyle(fontSize:15,fontWeight:FontWeight.w900,color:navy)))),const SizedBox(width:12),const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('JTC',style:TextStyle(fontSize:22,fontWeight:FontWeight.w900)),Text('Jitendra Transport Company',style:TextStyle(fontSize:11,color:Colors.white70))])]),actions:[IconButton(tooltip:'Business settings',onPressed:()=>setState(()=>tab=4),icon:const Icon(Icons.settings_outlined))]),
-      body:tab==0?Dashboard(key:ValueKey('dash$refresh'),onNavigate:(index)=>setState(()=>tab=index)):screens[tab],
+      body:screens[tab],
       bottomNavigationBar:NavigationBar(height:70,selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const [
         NavigationDestination(icon:Icon(Icons.home_outlined),selectedIcon:Icon(Icons.home),label:'Home'),
         NavigationDestination(icon:Icon(Icons.local_shipping_outlined),label:'Vehicles'),
@@ -76,7 +76,7 @@ class _HomeState extends State<Home> {
 Widget brandBanner()=>Container(
   margin:const EdgeInsets.only(bottom:14),
   padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),
-  decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(18),boxShadow:[BoxShadow(color:navy.withOpacity(.08),blurRadius:18,offset:const Offset(0,5))]),
+  decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(18),boxShadow:[BoxShadow(color:navy.withValues(alpha:.08),blurRadius:18,offset:const Offset(0,5))]),
   child:Column(children:[Image.asset('assets/logo.png',width:310,height:105,fit:BoxFit.contain),const SizedBox(height:5),const Text('TRANSPORT MANAGEMENT',style:TextStyle(color:navy,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))]));
 
 Widget panel({required Widget child})=>Card(elevation:0,color:Colors.white,margin:const EdgeInsets.symmetric(vertical:6),child:Padding(padding:const EdgeInsets.all(14),child:child));
