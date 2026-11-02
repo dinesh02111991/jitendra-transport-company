@@ -282,22 +282,29 @@ class PdfService {
     pw.Widget pair(String a,dynamic av,String b,dynamic bv)=>pw.Row(children:[pw.Expanded(child:pw.Container(color:pale,child:cell(a,av))),pw.SizedBox(width:7),pw.Expanded(child:pw.Container(color:pale,child:cell(b,bv)))]);
     pw.Widget line(String label,String value,{bool strong=false})=>pw.Container(padding:const pw.EdgeInsets.symmetric(vertical:7,horizontal:12),color:strong?pale:PdfColors.white,child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text(label,style:pw.TextStyle(fontSize:10,fontWeight:strong?pw.FontWeight.bold:pw.FontWeight.normal)),pw.Text(value,style:pw.TextStyle(fontSize:10,fontWeight:pw.FontWeight.bold,color:navy))]));
     // One shared PDF header for both document types; changes here affect BOTH PDFs.
+    // Shared, full-width branded header for Bills and Memos.
+    // The source logo is a wide wordmark, so display it as a wide image.
     pw.Widget companyHeader()=>pw.Column(children:[
-      pw.Row(crossAxisAlignment:pw.CrossAxisAlignment.center,children:[
-        pw.Container(width:105,height:72,alignment:pw.Alignment.center,child:pw.Image(logo,fit:pw.BoxFit.contain)),
-        pw.SizedBox(width:13),
-        pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[
-          pw.Text('JITENDRA TRANSPORT CO.',style:pw.TextStyle(color:navy,fontWeight:pw.FontWeight.bold,fontSize:16)),
-          pw.SizedBox(height:5),
-          pw.Text('Office: $address',style:const pw.TextStyle(fontSize:9,lineSpacing:2)),
-          pw.SizedBox(height:3),pw.Text('Mob: $phone',style:const pw.TextStyle(fontSize:9)),
-          if(gst.isNotEmpty)pw.Text('GSTIN: $gst',style:const pw.TextStyle(fontSize:9)),
-        ])),
-      ]),
+      pw.Center(child:pw.Container(
+        width:365,height:94,
+        alignment:pw.Alignment.center,
+        child:pw.Image(logo,fit:pw.BoxFit.contain),
+      )),
+      pw.SizedBox(height:5),
+      pw.Text('Office: $address',textAlign:pw.TextAlign.center,
+        style:pw.TextStyle(fontSize:9,color:navy)),
+      pw.SizedBox(height:3),
+      pw.Text('Mob: $phone',textAlign:pw.TextAlign.center,
+        style:pw.TextStyle(fontSize:9,fontWeight:pw.FontWeight.bold,color:navy)),
+      if(gst.isNotEmpty)pw.Padding(padding:const pw.EdgeInsets.only(top:3),
+        child:pw.Text('GSTIN: $gst',style:pw.TextStyle(fontSize:9,color:navy))),
       pw.SizedBox(height:10),
-      pw.Container(width:double.infinity,padding:const pw.EdgeInsets.symmetric(vertical:8,horizontal:10),color:navy,
-        child:pw.Text(specialization,textAlign:pw.TextAlign.center,style:pw.TextStyle(color:PdfColors.white,fontWeight:pw.FontWeight.bold,fontSize:8))),
-      pw.SizedBox(height:4),pw.Container(height:3,color:orange),
+      pw.Container(width:double.infinity,
+        padding:const pw.EdgeInsets.symmetric(vertical:8,horizontal:10),color:navy,
+        child:pw.Text(specialization,textAlign:pw.TextAlign.center,
+          style:pw.TextStyle(color:PdfColors.white,fontWeight:pw.FontWeight.bold,fontSize:8))),
+      pw.SizedBox(height:4),
+      pw.Container(height:3,color:orange),
     ]);
     if(kind=='Memo') {
       final party=val(customer['name']);
