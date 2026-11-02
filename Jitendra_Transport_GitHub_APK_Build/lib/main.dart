@@ -71,6 +71,12 @@ class _HomeState extends State<Home> {
   }
 }
 
+Widget brandBanner()=>Container(
+  margin:const EdgeInsets.only(bottom:14),
+  padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),
+  decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(18),boxShadow:[BoxShadow(color:navy.withOpacity(.08),blurRadius:18,offset:const Offset(0,5))]),
+  child:Column(children:[Image.asset('assets/logo.png',width:310,height:155,fit:BoxFit.contain),const SizedBox(height:5),const Text('TRANSPORT MANAGEMENT',style:TextStyle(color:navy,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))]));
+
 Widget panel({required Widget child})=>Card(elevation:0,color:Colors.white,margin:const EdgeInsets.symmetric(vertical:6),child:Padding(padding:const EdgeInsets.all(14),child:child));
 Widget line(String label,String value)=>Padding(padding:const EdgeInsets.symmetric(vertical:3),child:Row(children:[Expanded(child:Text(label,style:const TextStyle(color:Colors.black54))),Flexible(child:Text(value,textAlign:TextAlign.right,style:const TextStyle(fontWeight:FontWeight.w600)))]));
 Widget heading(String s)=>Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Text(s,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold,color:navy)));
@@ -88,7 +94,7 @@ class Dashboard extends StatelessWidget {
     final cost=expenses.where((e)=>'${e['spent_on']}'.startsWith(month)).fold<double>(0,(a,e)=>a+amount(e['value']));
     final outstanding=docs.where((d)=>d['kind']=='Bill').fold<double>(0,(a,d)=>a+amount(d['freight'])+amount(d['other'])-amount(d['paid']));
     return ListView(padding:const EdgeInsets.all(16),children:[
-      Center(child:Image.asset('assets/logo.png',height:95,fit:BoxFit.contain)),
+      brandBanner(),
       heading('Business overview · ${DateFormat('MMMM yyyy').format(DateTime.now())}'),
       Wrap(spacing:8,runSpacing:8,children:[_metric('Vehicles', '${vehicles.length}',Icons.local_shipping),_metric('In transit','${active.length}',Icons.route),_metric('Revenue',money.format(revenue),Icons.trending_up),_metric('Expenses',money.format(cost),Icons.payments),_metric('Operating P/L',money.format(revenue-cost),Icons.analytics),_metric('Outstanding',money.format(outstanding),Icons.account_balance_wallet)]),
       heading('Currently in transit'),
@@ -164,27 +170,65 @@ class _DocumentsState extends State<Documents> {
     final saved=await formDialog(context,'New customer',fields,()async{if(fields[0].value.isEmpty)throw Exception('Customer name required');await Store.add('customers',{'name':fields[0].value,'phone':fields[1].value,'address':fields[2].value,'gstin':fields[3].value});});if(saved)widget.changed();
   }
   Future<void> createDocument(String kind) async {
-    final cs=await Store.rows('customers'),vs=await Store.rows('vehicles'),ts=await Store.rows('trips');
-    if(cs.isEmpty||vs.isEmpty){if(mounted)snack(context,'Add at least one customer and one vehicle first');return;}
-    int customer=cs.first['id'] as int,vehicle=vs.first['id'] as int;int? trip;
-    final fields=[Field('Consignor'),Field('Consignee'),Field('Goods description'),Field('No. of articles'),Field('Weight'),Field('From'),Field('To'),Field('Freight amount',number:true),Field('Other charges',number:true),Field('Amount received',number:true),Field('Remarks')];
+    final cs=await Store.rows('customers'),vs=await Store.rows('vehicles');
+    if(cs.isEmpty||vs.isEmpty){if(mounted)snack(context,'Add a customer and vehicle first');return;}
     if(!mounted)return;
-    final saved=await showDialog<bool>(context:context,builder:(c)=>StatefulBuilder(builder:(c,setLocal)=>AlertDialog(title:Text('New $kind'),content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
-      DropdownButtonFormField<int>(initialValue:customer,decoration:const InputDecoration(labelText:'Customer'),items:cs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['name']}'))).toList(),onChanged:(x)=>setLocal(()=>customer=x!)),
-      DropdownButtonFormField<int>(initialValue:vehicle,decoration:const InputDecoration(labelText:'Vehicle'),items:vs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['registration']}'))).toList(),onChanged:(x)=>setLocal(()=>vehicle=x!)),
-      DropdownButtonFormField<int?>(initialValue:trip,decoration:const InputDecoration(labelText:'Related trip (optional)'),items:[const DropdownMenuItem<int?>(value:null,child:Text('None')),...ts.map((x)=>DropdownMenuItem<int?>(value:x['id'] as int,child:Text('${x['origin']} → ${x['destination']}')))],onChanged:(x)=>setLocal(()=>trip=x)),
-      ...fields.map((f)=>f.widget())])),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Cancel')),FilledButton(onPressed:()async{
-        final prefix=kind=='Bill'?'JTC-B':'JTC-M';
-        // SQLite insert and document sequence are serialized in one transaction.
-        try {await Store.db.transaction((txn)async{
-          final count=Sqflite.firstIntValue(await txn.rawQuery('SELECT COUNT(*) FROM documents WHERE kind=?',[kind]))??0;
-          final num='$prefix-${DateTime.now().year}-${(count+1).toString().padLeft(5,'0')}';
-          await txn.insert('documents',{'kind':kind,'doc_no':num,'customer_id':customer,'trip_id':trip,'vehicle_id':vehicle,'issued_on':today(),'consignor':fields[0].value,'consignee':fields[1].value,'goods':fields[2].value,'articles':fields[3].value,'weight':fields[4].value,'origin':fields[5].value,'destination':fields[6].value,'freight':amount(fields[7].value),'other':amount(fields[8].value),'paid':amount(fields[9].value),'note':fields[10].value});
-        });if(c.mounted)Navigator.pop(c,true);}catch(e){if(c.mounted)snack(c,'Unable to save: $e');}
-      },child:const Text('Create'))])));
-    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if(kind=='Memo') {await createMemo(cs,vs);return;}
+    await createBill(cs,vs);
+  }
+
+  Future<void> createMemo(List<Map<String,dynamic>> cs,List<Map<String,dynamic>> vs) async {
+    int customer=cs.first['id'] as int, vehicle=vs.first['id'] as int;
+    // The memo is a short letter, matching the original supplied memo.
+    // Fields map to existing SQLite columns to preserve existing installations.
+    final fields=[Field('Destination / for *'),Field('Rate per M.T. (Rs.) *',number:true),Field('Advance (Rs.)',number:true),Field('Balance (Rs.)',number:true),Field('Payment condition (e.g. at Mumbai one party delivery balance at godown)'),Field('Party PAN number (optional)')];
+    final saved=await showDialog<bool>(context:context,builder:(dialogContext)=>StatefulBuilder(builder:(dialogContext,setLocal)=>AlertDialog(
+      title:const Text('New transport memo'),
+      content:SizedBox(width:480,child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+        const Text('Only the details used in your original memo.',style:TextStyle(color:Colors.black54,fontSize:12)),const SizedBox(height:14),
+        DropdownButtonFormField<int>(initialValue:customer,isExpanded:true,decoration:const InputDecoration(labelText:'Party / M/S',border:OutlineInputBorder()),items:cs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['name']}',overflow:TextOverflow.ellipsis))).toList(),onChanged:(v)=>setLocal(()=>customer=v!)),
+        const SizedBox(height:12),DropdownButtonFormField<int>(initialValue:vehicle,isExpanded:true,decoration:const InputDecoration(labelText:'Truck number',border:OutlineInputBorder()),items:vs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['registration']}',overflow:TextOverflow.ellipsis))).toList(),onChanged:(v)=>setLocal(()=>vehicle=v!)),
+        const SizedBox(height:14),...fields.map((f)=>f.widget()),
+      ]))),
+      actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:const Text('Cancel')),FilledButton.icon(icon:const Icon(Icons.description_outlined),label:const Text('Create memo'),onPressed:()async{
+        if(fields[0].value.isEmpty||fields[1].value.isEmpty){snack(dialogContext,'Destination and rate are required');return;}
+        try{
+          await saveDocument({'kind':'Memo','customer_id':customer,'vehicle_id':vehicle,'trip_id':null,'issued_on':today(),'consignor':fields[5].value,'consignee':'','goods':'','articles':'','weight':'','origin':'','destination':fields[0].value,'freight':amount(fields[1].value),'other':amount(fields[3].value),'paid':amount(fields[2].value),'note':fields[4].value});
+          if(dialogContext.mounted)Navigator.pop(dialogContext,true);
+        }catch(e){if(dialogContext.mounted)snack(dialogContext,'Unable to save memo: $e');}
+      })])));
+    await Future<void>.delayed(const Duration(milliseconds:450));
     for(final f in fields){f.dispose();}
     if(saved==true)widget.changed();
+  }
+
+  Future<void> createBill(List<Map<String,dynamic>> cs,List<Map<String,dynamic>> vs) async {
+    int customer=cs.first['id'] as int,vehicle=vs.first['id'] as int;
+    final ts=await Store.rows('trips');int? trip;
+    final fields=[Field('Consignor'),Field('Consignee'),Field('Goods description'),Field('No. of articles'),Field('Weight'),Field('From'),Field('To'),Field('Freight amount',number:true),Field('Other charges',number:true),Field('Amount received',number:true),Field('Remarks')];
+    if(!mounted)return;
+    final saved=await showDialog<bool>(context:context,builder:(c)=>StatefulBuilder(builder:(c,setLocal)=>AlertDialog(title:const Text('New transport bill'),content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      DropdownButtonFormField<int>(initialValue:customer,isExpanded:true,decoration:const InputDecoration(labelText:'Customer'),items:cs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['name']}'))).toList(),onChanged:(x)=>setLocal(()=>customer=x!)),
+      DropdownButtonFormField<int>(initialValue:vehicle,isExpanded:true,decoration:const InputDecoration(labelText:'Vehicle'),items:vs.map((x)=>DropdownMenuItem(value:x['id'] as int,child:Text('${x['registration']}'))).toList(),onChanged:(x)=>setLocal(()=>vehicle=x!)),
+      DropdownButtonFormField<int?>(initialValue:trip,decoration:const InputDecoration(labelText:'Related trip (optional)'),items:[const DropdownMenuItem<int?>(value:null,child:Text('None')),...ts.map((x)=>DropdownMenuItem<int?>(value:x['id'] as int,child:Text('${x['origin']} → ${x['destination']}')))],onChanged:(x)=>setLocal(()=>trip=x)),
+      ...fields.map((f)=>f.widget())])),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Cancel')),FilledButton(onPressed:()async{
+        try{
+          await saveDocument({'kind':'Bill','customer_id':customer,'vehicle_id':vehicle,'trip_id':trip,'issued_on':today(),'consignor':fields[0].value,'consignee':fields[1].value,'goods':fields[2].value,'articles':fields[3].value,'weight':fields[4].value,'origin':fields[5].value,'destination':fields[6].value,'freight':amount(fields[7].value),'other':amount(fields[8].value),'paid':amount(fields[9].value),'note':fields[10].value});
+          if(c.mounted)Navigator.pop(c,true);
+        }catch(e){if(c.mounted)snack(c,'Unable to save bill: $e');}
+      },child:const Text('Create bill'))])));
+    await Future<void>.delayed(const Duration(milliseconds:450));
+    for(final f in fields){f.dispose();}
+    if(saved==true)widget.changed();
+  }
+
+  Future<void> saveDocument(Map<String,dynamic> data) async {
+    final kind=data['kind'];final prefix=kind=='Bill'?'JTC-B':'JTC-M';
+    await Store.db.transaction((txn)async{
+      final count=Sqflite.firstIntValue(await txn.rawQuery('SELECT COUNT(*) FROM documents WHERE kind=?',[kind]))??0;
+      final num='$prefix-${DateTime.now().year}-${(count+1).toString().padLeft(5,'0')}';
+      await txn.insert('documents',{'doc_no':num,...data});
+    });
   }
   @override Widget build(BuildContext context)=>FutureBuilder(future:Future.wait([Store.rows('documents'),Store.rows('customers'),Store.rows('vehicles')]),builder:(c,s){
     final docs=s.data?[0]??[],cs=s.data?[1]??[],vs=s.data?[2]??[];
@@ -203,7 +247,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final saved=await formDialog(context,'Business details',fields,()async{for(var i=0;i<keys.length;i++){await Store.setSetting(keys[i],fields[i].value);}});
     if(saved)widget.changed();
   }
-  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(16),children:[heading('Business settings'),Center(child:Image.asset('assets/logo.png',height:120)),panel(child:const Text('JITENDRA TRANSPORT COMPANY',textAlign:TextAlign.center,style:TextStyle(fontWeight:FontWeight.bold))),FilledButton.icon(onPressed:edit,icon:const Icon(Icons.edit),label:const Text('Edit address, GST & bank details')),const SizedBox(height:14),panel(child:const Text('Offline storage: all records are kept in the app’s private SQLite database on this phone. Uninstalling or clearing app data may permanently delete records. A backup/export feature is not included in V1.'))]);
+  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(16),children:[heading('Business settings'),brandBanner(),FilledButton.icon(onPressed:edit,icon:const Icon(Icons.edit),label:const Text('Edit address, GST & bank details')),const SizedBox(height:14),panel(child:const Text('Offline storage: all records are kept in the app’s private SQLite database on this phone. Uninstalling or clearing app data may permanently delete records. A backup/export feature is not included in V1.'))]);
 }
 
 class PdfService {
@@ -223,6 +267,32 @@ class PdfService {
     pw.Widget band(String title,String subtitle)=>pw.Container(padding:const pw.EdgeInsets.all(15),decoration:pw.BoxDecoration(color:navy,borderRadius:pw.BorderRadius.circular(8)),child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text(title,style:pw.TextStyle(fontSize:18,fontWeight:pw.FontWeight.bold,color:PdfColors.white)),pw.SizedBox(height:4),pw.Text(subtitle,style:pw.TextStyle(fontSize:9,color:PdfColors.white))]),pw.Text(val(d['doc_no']),style:pw.TextStyle(color:PdfColors.white,fontSize:10,fontWeight:pw.FontWeight.bold))]));
     pw.Widget pair(String a,dynamic av,String b,dynamic bv)=>pw.Row(children:[pw.Expanded(child:pw.Container(color:pale,child:cell(a,av))),pw.SizedBox(width:7),pw.Expanded(child:pw.Container(color:pale,child:cell(b,bv)))]);
     pw.Widget line(String label,String value,{bool strong=false})=>pw.Container(padding:const pw.EdgeInsets.symmetric(vertical:7,horizontal:12),color:strong?pale:PdfColors.white,child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text(label,style:pw.TextStyle(fontSize:10,fontWeight:strong?pw.FontWeight.bold:pw.FontWeight.normal)),pw.Text(value,style:pw.TextStyle(fontSize:10,fontWeight:pw.FontWeight.bold,color:navy))]));
+    if(kind=='Memo') {
+      final party=val(customer['name']);
+      final pan=val(d['consignor']);
+      final truck=val(vehicle['registration']);
+      final destination=val(d['destination']);
+      final rate=amount(d['freight']).toStringAsFixed(2);
+      final advance=amount(d['paid']).toStringAsFixed(0);
+      final balance=amount(d['other']).toStringAsFixed(0);
+      final condition='${d['note']??''}'.trim();
+      pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(38),build:(context)=>[
+        pw.Row(crossAxisAlignment:pw.CrossAxisAlignment.center,children:[pw.Image(logo,width:105,height:65,fit:pw.BoxFit.contain),pw.SizedBox(width:15),pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text('JITENDRA TRANSPORT COMPANY',style:pw.TextStyle(fontSize:15,color:navy,fontWeight:pw.FontWeight.bold)),pw.SizedBox(height:4),pw.Text(address,style:const pw.TextStyle(fontSize:9)),pw.Text('Phone: $phone',style:const pw.TextStyle(fontSize:9)),if(gst.isNotEmpty)pw.Text('GSTIN: $gst',style:const pw.TextStyle(fontSize:9))]))]),
+        pw.SizedBox(height:12),pw.Container(height:3,color:orange),pw.SizedBox(height:18),
+        pw.Container(padding:const pw.EdgeInsets.symmetric(vertical:12,horizontal:16),decoration:pw.BoxDecoration(color:navy,borderRadius:pw.BorderRadius.circular(6)),child:pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('TRANSPORT MEMO',style:pw.TextStyle(color:PdfColors.white,fontSize:17,fontWeight:pw.FontWeight.bold)),pw.Text(val(d['doc_no']),style:pw.TextStyle(color:PdfColors.white,fontSize:10))])),
+        pw.SizedBox(height:15),pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('Memo No: ${val(d['doc_no'])}',style:pw.TextStyle(color:navy,fontSize:10,fontWeight:pw.FontWeight.bold)),pw.Text('Date: ${val(d['issued_on'])}',style:const pw.TextStyle(fontSize:10))]),
+        pw.SizedBox(height:25),pw.Text('To,',style:const pw.TextStyle(fontSize:11)),pw.SizedBox(height:7),pw.Text('M/S: $party',style:pw.TextStyle(fontSize:11,fontWeight:pw.FontWeight.bold)),pw.Text('PAN No: $pan',style:const pw.TextStyle(fontSize:10)),
+        pw.SizedBox(height:24),pw.Text('Dear Sir,',style:const pw.TextStyle(fontSize:11)),pw.SizedBox(height:23),
+        pw.Text('We are sending Truck No. $truck for $destination at the rate of Rs. $rate per M.T. Guaranteed fixed M. Ton.',style:const pw.TextStyle(fontSize:11,lineSpacing:5)),
+        pw.SizedBox(height:13),pw.Text('Advance Rs. $advance, Balance Rs. $balance${condition.isEmpty?'': ' $condition'}.',style:const pw.TextStyle(fontSize:11,lineSpacing:5)),
+        pw.SizedBox(height:25),pw.Text('Please arrange to load the truck and check all the necessary papers before loading the goods.',style:const pw.TextStyle(fontSize:11,lineSpacing:5)),
+        pw.SizedBox(height:22),pw.Text('Kindly insure your goods; otherwise, we are not responsible for accidents, theft, looting, etc.',style:const pw.TextStyle(fontSize:11,lineSpacing:5)),
+        pw.SizedBox(height:27),pw.Text('Thanking you,',style:const pw.TextStyle(fontSize:11)),
+        pw.SizedBox(height:55),pw.Align(alignment:pw.Alignment.centerRight,child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.end,children:[pw.Text('Yours faithfully,',style:const pw.TextStyle(fontSize:11)),pw.SizedBox(height:10),pw.Text('For JITENDRA TRANSPORT CO.',style:pw.TextStyle(fontSize:11,color:navy,fontWeight:pw.FontWeight.bold))])),
+      ]));
+      final dir=await getApplicationDocumentsDirectory();final pdfDir=Directory(p.join(dir.path,'pdfs'));await pdfDir.create(recursive:true);
+      final file=File(p.join(pdfDir.path,'${d['doc_no']}.pdf'));await file.writeAsBytes(await pdf.save());return file;
+    }
     pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(35),footer:(context)=>pw.Column(children:[pw.Divider(color:orange),pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,children:[pw.Text('JITENDRA TRANSPORT COMPANY  •  Computer-generated document',style:const pw.TextStyle(fontSize:8,color:PdfColors.grey600)),pw.Text('Page ${context.pageNumber}',style:const pw.TextStyle(fontSize:8,color:PdfColors.grey600))])]),build:(context)=>[
       pw.Row(crossAxisAlignment:pw.CrossAxisAlignment.center,children:[pw.Image(logo,width:105,height:65,fit:pw.BoxFit.contain),pw.SizedBox(width:15),pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text('JITENDRA TRANSPORT COMPANY',style:pw.TextStyle(fontSize:15,color:navy,fontWeight:pw.FontWeight.bold)),pw.SizedBox(height:4),pw.Text(address,style:const pw.TextStyle(fontSize:9)),pw.Text('Phone: $phone',style:const pw.TextStyle(fontSize:9)),if(gst.isNotEmpty)pw.Text('GSTIN: $gst',style:const pw.TextStyle(fontSize:9))]))]),
       pw.SizedBox(height:13),pw.Container(height:3,color:orange),pw.SizedBox(height:15),
